@@ -9,14 +9,19 @@
 /* eslint-env node */
 const fs = require('fs');
 const {dirname} = require('path');
+const loadFusionRC = require('../load-fusionrc.js');
 
 const rootDir = dirname(fs.realpathSync(`${process.cwd()}/package.json`));
 
+const {jest: jestConfig, jsExtPattern} = loadFusionRC(rootDir);
+const testFileExt = jsExtPattern ? jsExtPattern.source : '\\.js$';
+
+const TRANSFORM_IGNORE_PATTERNS = ['/node_modules/(?!(fusion-cli.*build))'];
 const matchField = process.env.TEST_REGEX ? 'testRegex' : 'testMatch';
 const matchValue = process.env.TEST_FOLDER
-  ? [`**/${process.env.TEST_FOLDER || '__tests__'}/**/*.js`]
+  ? [`**/${process.env.TEST_FOLDER || '__tests__'}/**/*${testFileExt}`]
   : process.env.TEST_REGEX ||
-    (process.env.TEST_MATCH || '**/__tests__/**/*.js').split(',');
+    (process.env.TEST_MATCH || `**/__tests__/**/*${testFileExt}`).split(',');
 
 function getReactVersion() {
   // $FlowFixMe
@@ -30,6 +35,7 @@ function getReactVersion() {
     .shift()
     .match(/\d+/);
 }
+
 function getReactSetup() {
   try {
     return [require.resolve(`./jest-framework-setup-${getReactVersion()}.js`)];
@@ -40,36 +46,27 @@ function getReactSetup() {
 
 const reactSetup = getReactSetup();
 
-function getTransformIgnorePatterns() {
-  const defaults = ['/node_modules/(?!(fusion-cli.*build))'];
-  try {
-    const path = require('path');
-    // $FlowFixMe
-    const fusionrc = require(path.resolve(process.cwd(), '.fusionrc.js'));
-    return fusionrc.jest.transformIgnorePatterns;
-  } catch (e) {
-    return defaults;
-  }
-}
-
-const transformIgnorePatterns = getTransformIgnorePatterns();
+const transformIgnorePatterns =
+  (jestConfig && jestConfig.transformIgnorePatterns) ||
+  TRANSFORM_IGNORE_PATTERNS;
 
 module.exports = {
   coverageDirectory: `${rootDir}/coverage`,
   coverageReporters: ['json'],
   rootDir,
   transform: {
-    '\\.js$': require.resolve('./jest-transformer.js'),
+    [testFileExt]: require.resolve('./jest-transformer.js'),
     '\\.(gql|graphql)$': require.resolve('./graphql-jest-transformer.js'),
   },
   transformIgnorePatterns,
   setupFiles: [require.resolve('./jest-framework-shims.js'), ...reactSetup],
+  setupFilesAfterEnv: jestConfig && jestConfig.setupFilesAfterEnv,
   snapshotSerializers:
     reactSetup.length > 0 ? [require.resolve('enzyme-to-json/serializer')] : [],
   [matchField]: matchValue,
   testURL: 'http://localhost:3000/',
   collectCoverageFrom: [
-    'src/**/*.js',
+    `src/**/*${testFileExt}`,
     '!**/__generated__/**',
     '!**/__integration__/**',
     '!**/__tests__/**',
