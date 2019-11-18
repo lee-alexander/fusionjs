@@ -1,6 +1,6 @@
 {
   "name": "lee-ts-fusion-cli",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "CLI",
   "repository": {
     "directory": "fusion-cli",
@@ -113,8 +113,8 @@
     "ws": "^7.1.1"
   },
   "peerDependencies": {
-    "fusion-core": "0.0.0-monorepo",
-    "fusion-tokens": "0.0.0-monorepo",
+    "fusion-core": "^2.0.6",
+    "fusion-tokens": "^2.0.6",
     "graphql": "^14.5.8"
   },
   "peerDependenciesMeta": {
