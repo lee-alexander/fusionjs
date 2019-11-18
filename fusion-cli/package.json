@@ -1,11 +1,11 @@
 {
-  "name": "fusion-cli",
-  "version": "0.0.0-monorepo",
+  "name": "lee-ts-fusion-cli",
+  "version": "0.0.2",
   "description": "CLI",
   "repository": {
     "directory": "fusion-cli",
     "type": "git",
-    "url": "https://github.com/fusionjs/fusionjs"
+    "url": "https://github.com/lee-alexander/fusionjs"
   },
   "bin": {
     "fusion": "bin/cli.js"
@@ -109,8 +109,8 @@
     "react-test-renderer": "^16.8.6",
     "request-promise": "^4.2.4",
     "tape": "^4.10.1",
-    "ws": "^7.1.1",
-    "unfetch": "^4.1.0"
+    "unfetch": "^4.1.0",
+    "ws": "^7.1.1"
   },
   "peerDependencies": {
     "fusion-core": "0.0.0-monorepo",
