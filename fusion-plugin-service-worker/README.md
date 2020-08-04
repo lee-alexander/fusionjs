@@ -1,6 +1,6 @@
 # fusion-plugin-service-worker
 
-[![Build status](https://badge.buildkite.com/4c8b6bc04b61175d66d26b54b1d88d52e24fecb1b537c54551.svg?branch=master)](https://buildkite.com/uberopensource/fusionjs)
+[![Build status](https://badge.buildkite.com/7a82192275779f6a8ba81f7d4a1b0d294256838faa1dfdf080.svg?branch=master)](https://buildkite.com/uberopensource/fusionjs)
 
 The Fusion plugin for Service Workers.
 
@@ -56,9 +56,6 @@ if (__BROWSER__) {
 }
 if (__NODE__) {
   app.register(SWTemplateFunctionToken, swTemplateFunction);
-  // optional (default 24 hours)
-  // The time (in ms) before the service worker cache will automatically expire
-  app.register(SWcacheDuration, expiry);
 }
 ```
 
@@ -66,7 +63,7 @@ The browser will automatically register the service worker on page load.
 
 ## Options
 
-The SWOptionsToken accepts an object with several optional configuration properties:
+The SWOptionsToken  (__NODE__ only) accepts an object with several optional configuration properties:
 
 ```ts
 type Options = {

@@ -1,8 +1,9 @@
 // @flow
+const {dirname} = require('path');
 const {checksumCache} = require('./checksum-cache.js');
 const {getDownstreams} = require('./get-downstreams.js');
 const {spawn} = require('./node-helpers.js');
-const {node, yarn} = require('./binary-paths.js');
+const {bazel, node, yarn} = require('./binary-paths.js');
 
 const errorsOnly = ['ignore', 'ignore', 'inherit'];
 
@@ -152,4 +153,50 @@ const start /*: Start */ = async ({root, deps, args, stdio = 'inherit'}) => {
   });
 };
 
-module.exports = {build, dev, test, lint, flow, start};
+/*::
+export type ExecArgs = {
+  root: string,
+  deps: Array<Metadata>,
+  args: Array<string>,
+  stdio?: Stdio,
+};
+export type Exec = (ExecArgs) => Promise<void>;
+*/
+const exec /*: Exec */ = async ({root, deps, args, stdio = 'inherit'}) => {
+  const [command, ...params] = args;
+  const main = deps.slice(-1).pop();
+  const cwd = main.dir;
+  const path = process.env.PATH || '';
+  const bazelDir = dirname(bazel);
+  const nodeDir = dirname(node);
+  const env = {PATH: `${bazelDir}:${nodeDir}:${path}:${cwd}/node_modules/.bin`};
+  await spawn(command, params, {stdio, env, cwd});
+};
+
+/*::
+export type ScriptArgs = {
+  root: string,
+  deps: Array<Metadata>,
+  command: string,
+  args: Array<string>,
+  stdio?: Stdio,
+};
+export type Script = (ScriptArgs) => Promise<void>;
+*/
+const script /*: Script */ = async ({
+  root,
+  deps,
+  command,
+  args,
+  stdio = 'inherit',
+}) => {
+  const main = deps.slice(-1).pop();
+  await batchBuild({root, deps, self: false, stdio: errorsOnly});
+  await spawn(node, [yarn, command, ...args], {
+    stdio,
+    env: process.env,
+    cwd: main.dir,
+  });
+};
+
+module.exports = {build, test, lint, flow, dev, start, exec, script};

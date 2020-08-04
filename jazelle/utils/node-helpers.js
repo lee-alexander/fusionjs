@@ -2,7 +2,15 @@
 const proc = require('child_process');
 const {promisify} = require('util');
 const {tmpdir} = require('os');
-const {readFile, writeFile, access, readdir, lstat} = require('fs');
+const {
+  readFile,
+  writeFile,
+  access,
+  readdir,
+  mkdir: makeDir,
+  lstat,
+  realpath,
+} = require('fs');
 
 /*::
 import {Writable, Readable, Duplex} from 'stream';
@@ -39,6 +47,10 @@ const exec /*: Exec */ = (cmd, opts = {}, stdio = []) => {
       if (stdio[0]) child.stdout.pipe(stdio[0]);
       if (stdio[1]) child.stderr.pipe(stdio[1]);
     }
+    process.on('exit', () => {
+      // $FlowFixMe flow typedef is missing .exitCode
+      if (child.exitCode === null) child.kill();
+    });
   });
 };
 
@@ -76,6 +88,10 @@ const spawn /*: Spawn */ = (cmd, argv, opts) => {
       }
       resolve();
     });
+    process.on('exit', () => {
+      // $FlowFixMe flow typedef is missing .exitCode
+      if (child.exitCode === null) child.kill();
+    });
   });
 };
 
@@ -92,7 +108,16 @@ const exists /*: Exists */ = filename =>
 const read = promisify(readFile);
 const write = promisify(writeFile);
 const ls = promisify(readdir);
+const mkdir = promisify(makeDir);
 const lstatP = promisify(lstat);
+const realpathP = promisify(realpath);
+
+/*::
+export type Move = (string, string) => Promise<void>
+*/
+const move /*: Move */ = async (from, to) => {
+  await spawn('mv', [from, to]); // fs.rename can't move across devices/partitions so it can die w/ EXDEV error
+};
 
 /*::
 export type Remove = (string) => Promise<void>;
@@ -113,4 +138,16 @@ const remove /*: Remove */ = async dir => {
 // $FlowFixMe flow can't handle statics of async function
 remove.fork = true;
 
-module.exports = {exec, spawn, exists, read, write, remove, ls, lstat: lstatP};
+module.exports = {
+  exec,
+  spawn,
+  exists,
+  read,
+  write,
+  remove,
+  ls,
+  mkdir,
+  move,
+  lstat: lstatP,
+  realpath: realpathP,
+};

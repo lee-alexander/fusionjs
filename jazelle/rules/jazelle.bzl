@@ -9,9 +9,9 @@ def _jazelle_impl(ctx):
     ROOT=`$NODE -e "console.log(require('path').dirname(require('fs').realpathSync('{cli}')))"`
     if [ ! -d $ROOT/node_modules ]
     then
-      $NODE $YARN --cwd $ROOT
+      $NODE $YARN --cwd $ROOT --ignore-engines --production=true
     fi
-    cd $CWD && $NODE $CLI $@
+    cd $CWD && $NODE --max_old_space_size=65536 $CLI $@
     """.format(
       node = ctx.files._node[0].path,
       yarn = ctx.files._yarn[0].path,

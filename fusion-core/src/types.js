@@ -52,6 +52,8 @@ export type MiddlewareWithDeps<Deps> = (
 
 export type ExtractTokenType = <V>(Token<V>) => V;
 
+export type ExtractDepsType<V> = $ObjMap<V, ExtractTokenType>;
+
 export type FusionPlugin<Deps, Service> = {|
   __plugin__: boolean,
   stack: string,
@@ -75,3 +77,7 @@ export type cleanupFn = (thing: any) => Promise<void>;
 export type SSRBodyTemplate = Context => $PropertyType<Context, 'body'>;
 
 export type RenderType = (any, Context) => any;
+
+export type RouteTagsType = {
+  from: (ctx: Context) => {[string]: string},
+};

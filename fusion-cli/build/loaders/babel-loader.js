@@ -29,7 +29,10 @@ function webpackLoader(source /*: string */, inputSourceMap /*: Object */) {
   const callback = this.async();
   loader
     .call(this, source, inputSourceMap, this[translationsDiscoveryKey])
-    .then(([code, map]) => callback(null, code, map), err => callback(err));
+    .then(
+      ([code, map]) => callback(null, code, map),
+      err => callback(err)
+    );
 }
 
 async function loader(
@@ -53,7 +56,10 @@ async function loader(
     .digest('hex');
   // Use worker farm if provided, otherwise require the worker code and execute it in the same thread
   const worker = this[workerKey] || require('./babel-worker.js');
-  const cacheDir = path.join(process.cwd(), 'node_modules/.fusion_babel-cache');
+  const cacheDir = path.join(
+    loaderOptions.dir,
+    'node_modules/.fusion_babel-cache'
+  );
 
   const diskCache = getCache(cacheDir);
 

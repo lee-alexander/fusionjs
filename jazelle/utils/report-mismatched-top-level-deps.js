@@ -2,7 +2,7 @@
 const {check: checkDeps} = require('./lockfile.js');
 
 /*::
-import type {VersionPolicy} from './get-manifest.js';
+import type {VersionPolicy, ExceptionMetadata} from './get-manifest.js';
 
 export type ReportMismatchedTopLevelDepsArgs = {
   root: string,
@@ -42,49 +42,61 @@ const reportMismatchedTopLevelDeps /*: ReportMismatchedTopLevelDeps */ = async (
     lockstep: !!versionPolicy.lockstep,
     exceptions: versionPolicy.exceptions || [],
   };
-  const exceptions = Object.keys(reported).filter(dep =>
-    policy.exceptions.includes(dep)
-  );
 
-  if (policy.lockstep) {
-    const reportedFilter = Object.keys(reported)
-      .filter(key => !policy.exceptions.includes(key))
-      .reduce((obj, key) => {
-        obj[key] = reported[key];
-        return obj;
-      }, {});
-    const valid = Object.keys(reportedFilter).length === 0;
-
-    return {valid, policy, reported: reportedFilter};
-  } else {
-    const valid = exceptions.length === Object.keys(reported);
-    return {valid, policy, reported};
-  }
+  let reportedFilter = Object.keys(reported)
+    .filter((dep /*: string */) =>
+      policy.lockstep
+        ? !policy.exceptions.includes(dep)
+        : policy.exceptions.filter(
+            // $FlowFixMe
+            exception => exception === dep || exception.name === dep
+          ).length > 0
+    )
+    .reduce((obj, dep /*: string */) => {
+      const meta /*: ExceptionMetadata */ = (policy.exceptions /*: any */)
+        .filter(meta => meta.name === dep)[0];
+      if (!meta) {
+        // for blanket exemptions, include all reportedly mismatched versions
+        obj[dep] = reported[dep];
+      } else {
+        // otherwise, keep only versions that are not specifically exempt in the version policy
+        for (let version of Object.keys(reported[dep])) {
+          if (!meta.versions.includes(version)) {
+            if (!obj[dep]) obj[dep] = {};
+            obj[dep][version] = reported[dep][version];
+          }
+        }
+      }
+      return obj;
+    }, {});
+  const valid = Object.keys(reportedFilter).length === 0;
+  return {valid, policy, reported: reportedFilter};
 };
 
 /*::
-export type GetErrorMessage = (Report) => string;
+export type GetErrorMessage = (Report, boolean) => string;
 */
-const getErrorMessage /*: GetErrorMessage */ = result => {
+const getErrorMessage /*: GetErrorMessage */ = (result, json = false) => {
   if (!result.valid) {
     const policy = result.policy;
     const exceptions = Object.keys(result.reported).filter(dep =>
       policy.exceptions.includes(dep)
     );
-    const message = `Version policy violation. Use \`jazelle greenkeep\` to ensure all projects use the same dependency version`;
+    const message = `Version policy violation. Use \`jazelle upgrade\` to ensure all projects use the same dependency version`;
     const positiveSpecifier =
       policy.exceptions.length > 0
-        ? ` for deps other than ${policy.exceptions.join(', ')}`
+        ? ` for deps other than ${policy.exceptions
+            .map(exception => exception.name || exception)
+            .join(', ')}`
         : '';
     const negativeSpecifier =
       exceptions.length > 0 ? ` for ${exceptions.join(', ')}` : '';
     const modifier = policy.lockstep ? positiveSpecifier : negativeSpecifier;
-    const violations = `\nViolations:\n${Object.keys(result.reported)
-      .map(dep => `${dep}: ${Object.keys(result.reported[dep]).join(', ')}`)
-      .join('\n')}`;
-    return message + modifier + violations;
+    const report = JSON.stringify(result.reported, null, 2);
+    const violations = `\nViolations:\n${report}`;
+    return json ? report : message + modifier + violations;
   } else {
-    return '';
+    return json ? '{}' : '';
   }
 };
 

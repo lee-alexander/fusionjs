@@ -14,6 +14,7 @@ export type GenerateBazelBuildRulesArgs = {
   root: string,
   deps: Array<Metadata>,
   projects: Array<string>,
+  dependencySyncRule: string,
 }
 export type GenerateBazelBuildRules = (GenerateBazelBuildRulesArgs) => Promise<void>
 export type TemplateArgs = {
@@ -28,6 +29,7 @@ const generateBazelBuildRules /*: GenerateBazelBuildRules */ = async ({
   root,
   deps,
   projects,
+  dependencySyncRule,
 }) => {
   const depMap = deps.reduce((map, dep) => {
     map[dep.meta.name] = dep;
@@ -58,15 +60,19 @@ const generateBazelBuildRules /*: GenerateBazelBuildRules */ = async ({
         await write(build, rules.trim(), 'utf8');
       } else {
         // sync web_library deps list in BUILD.bazel with local dependencies in package.json
-        let code = await read(build, 'utf8');
-        const items = getCallArgItems(code, 'web_library', 'deps');
+        const src = await read(build, 'utf8');
+        let code = src;
+        const items = getCallArgItems(code, dependencySyncRule, 'deps');
         dependencies
           .map(d => `"${d}"`)
           .forEach(dependency => {
-            if (!items.includes(dependency)) {
+            // only add if no related target exists
+            const [path] = dependency.split(':');
+            const paths = items.map(item => item.split(':').shift());
+            if (!paths.includes(path)) {
               code = addCallArgItem(
                 code,
-                'web_library',
+                dependencySyncRule,
                 'deps',
                 `${dependency}`
               );
@@ -76,11 +82,11 @@ const generateBazelBuildRules /*: GenerateBazelBuildRules */ = async ({
           if (!dependencies.map(d => `"${d}"`).includes(item)) {
             const [, path, name] = item.match(/\/\/(.+?):([^"]+)/) || [];
             if (projects.includes(path) && basename(path) === name) {
-              code = removeCallArgItem(code, 'web_library', 'deps', item);
+              code = removeCallArgItem(code, dependencySyncRule, 'deps', item);
             }
           }
         });
-        await write(build, code, 'utf8');
+        if (src.trim() !== code.trim()) await write(build, code, 'utf8');
       }
     })
   );

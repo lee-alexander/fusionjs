@@ -1,6 +1,6 @@
 # fusion-plugin-rpc
 
-[![Build status](https://badge.buildkite.com/4c8b6bc04b61175d66d26b54b1d88d52e24fecb1b537c54551.svg?branch=master)](https://buildkite.com/uberopensource/fusionjs)
+[![Build status](https://badge.buildkite.com/7a82192275779f6a8ba81f7d4a1b0d294256838faa1dfdf080.svg?branch=master)](https://buildkite.com/uberopensource/fusionjs)
 
 Fetch data on the server and client with an
 [RPC](https://en.wikipedia.org/wiki/Remote_procedure_call) style interface.
@@ -184,8 +184,10 @@ Required. See
 ##### `RPCHandlersToken`
 
 ```js
-import {RPCHandlersToken} from 'fusion-plugin-rpc-redux-react';
+import {RPCHandlersToken} from 'fusion-plugin-rpc';
 ```
+
+Object with keys as the name of the handler and the value the handler implementation. Required. Server-only.
 
 ##### `RPCHandlersConfigToken`
 
@@ -195,7 +197,21 @@ import {RPCHandlersConfigToken} from 'fusion-plugin-rpc';
 
 Configures what RPC handlers exist. Required. Server-only.
 
-###### Types
+##### `BodyParserOptionsToken`
+
+```js
+import {BodyParserOptionsToken} from 'fusion-plugin-rpc';
+```
+
+Configures options for `koa-bodyparser`. Optional. See available options [here](https://github.com/koajs/bodyparser#options).
+
+For example, if you want to increase the limit for uploading large file sizes, set `jsonLimit` to a higher limit:
+
+```js
+app.register(BodyParserOptionsToken, {jsonLimit: '20mb'});
+```
+
+#### Types
 
 ```flow
 type RPCHandlers = Object<string, () => any>
@@ -229,6 +245,10 @@ type RPCConfigType = {
 }
 ```
 
+##### `BodyParserOptionsToken`
+
+Optional. See [koa-bodyparser Options type](https://github.com/flow-typed/flow-typed/blob/master/definitions/npm/koa-bodyparser_v4.x.x/flow_v0.104.x-/koa-bodyparser_v4.x.x.js#L9).
+
 ---
 
 #### Service API
@@ -239,7 +259,7 @@ const rpc: RPC = Rpc.from((ctx: Context));
 
 - `ctx: Context` - Required. A
   [Fusion.js context](https://github.com/fusionjs/fusionjs/tree/master/fusion-core#context)
-- returns `rpc: {request: (method: string, args: any) => Promise<any>}`
+- returns `rpc: {request: (method: string, args: any, headers: Object, options: RequestOptions) => Promise<any>}`
 
   - `request: (method: string, args: any) => Promise<any>` - Makes an RPC call
     via an HTTP request. If on the server, this will directly call the `method`
@@ -252,7 +272,12 @@ const rpc: RPC = Rpc.from((ctx: Context));
 
     - `method: string` - Required. The RPC method name
     - `args: any` - Optional. Arguments to pass to the server-side RPC handler.
-      Must be JSON-serializable.
+      Must be JSON-serializable or an instance of
+      [FormData](https://developer.mozilla.org/en-US/docs/Web/API/FormData).
+    - `headers: Object` - Optional. Browser only. HTTP headers to use when
+      making the request from the browser to the server.
+    - `options: RequestOptions` - Optional. Browser only. Additional request
+      options to pass to the underlying `fetch` call.
 
 ### mock
 

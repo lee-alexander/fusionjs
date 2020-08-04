@@ -13,6 +13,7 @@ const winston = require('winston');
 const {Compiler} = require('../build/compiler');
 const {DevelopmentRuntime} = require('../build/dev-runtime');
 const {TestAppRuntime} = require('../build/test-runtime');
+const {execSync: exec} = require('child_process');
 
 exports.run = async function(
   {
@@ -24,6 +25,7 @@ exports.run = async function(
     hmr,
     open,
     logLevel,
+    exitOnError,
   } /*: any */
 ) {
   const logger = winston.createLogger({
@@ -76,17 +78,32 @@ exports.run = async function(
     } catch (e) {} // eslint-disable-line
   };
 
-  const watcher = await new Promise(resolve => {
+  const watcher = await new Promise((resolve, reject) => {
     const watcher = compiler.start((err, stats) => {
       if (err || stats.hasErrors()) {
-        return resolve(watcher);
+        if (exitOnError) {
+          return reject(
+            new Error('Compilation error exiting due to exitOnError parameter.')
+          );
+        } else {
+          return resolve(watcher);
+        }
       }
       return runAll().then(() => resolve(watcher));
     });
   });
 
   // Rerun for each recompile
-  compiler.on('done', runAll);
+  compiler.on('done', () => {
+    if (debug) {
+      // make the default node debug port available for attaching by killing the
+      // old attached process
+      try {
+        exec("kill -9 $(lsof -n -i:9229 | grep node | awk '{print $2}')");
+      } catch (e) {} // eslint-disable-line
+    }
+    runAll();
+  });
   compiler.on('invalid', () => devRuntime.invalidate());
 
   function stop() {

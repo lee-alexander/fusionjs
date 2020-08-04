@@ -1,6 +1,6 @@
 # fusion-test-utils
 
-[![Build status](https://badge.buildkite.com/4c8b6bc04b61175d66d26b54b1d88d52e24fecb1b537c54551.svg?branch=master)](https://buildkite.com/uberopensource/fusionjs)
+[![Build status](https://badge.buildkite.com/7a82192275779f6a8ba81f7d4a1b0d294256838faa1dfdf080.svg?branch=master)](https://buildkite.com/uberopensource/fusionjs)
 
 Provides test utility functions for Fusion.js
 
@@ -47,7 +47,7 @@ Creates a simulator which exposes functionality to simulate requests and renders
 `app` - instance of a FusionApp
 `testPlugin` - optional plugin to make assertions on dependencies
 
-#### `getSimulator(...).request(url: String, options: ?Object)` => Promise<Context>
+#### `getSimulator(...).request(url: String, options: ?Object) => Promise<Context>`
 
 Simulates a request through your application.
 `url` - path for request
@@ -56,11 +56,11 @@ Simulates a request through your application.
 `options.headers` - headers to be added to the request
 `options.body` - body for the request
 
-#### `getSimulator(...).render(url: String, options: ?Object)` => Promise<Context>
+#### `getSimulator(...).render(url: String, options: ?Object) => Promise<Context>`
 
 This is the same as `request`, but defaults the `accept` header to `text/html` which will trigger a render of your application.
 
-#### `getSimulator(...).getService(token: Token<T>)` => T
+#### `getSimulator(...).getService(token: Token<T>) => T`
 
 This is a useful utility for testing the API provided by a plugin. For example:
 

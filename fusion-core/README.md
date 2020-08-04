@@ -1,6 +1,6 @@
 # fusion-core
 
-[![Build status](https://badge.buildkite.com/4c8b6bc04b61175d66d26b54b1d88d52e24fecb1b537c54551.svg?branch=master)](https://buildkite.com/uberopensource/fusionjs)
+[![Build status](https://badge.buildkite.com/7a82192275779f6a8ba81f7d4a1b0d294256838faa1dfdf080.svg?branch=master)](https://buildkite.com/uberopensource/fusionjs)
 
 The `fusion-core` package provides a generic entry point class for Fusion.js applications that is used by the Fusion.js runtime. It also provides primitives for implementing server-side code, and utilities for registering plugins into an application to augment its functionality.
 
@@ -164,6 +164,32 @@ app.register(HttpServerToken, server);
 The `HttpServerToken` is used to register the current server as a dependency that can be utilized from plugins that require
 access to it. This is normally not required but is available for specific usage cases.
 
+##### RouteTagsToken
+
+```js
+import {RouteTagsToken, createPlugin} from 'fusion-core';
+
+createPlugin({
+  deps: {
+    RouteTags: RouteTagsToken,
+  },
+  middleware({RouteTags}) {
+    return (ctx, next) => {
+      const routeTags = RouteTags.from(ctx);
+      if (ctx.path === '/graphql') {
+        routeTags.name = 'graphql';
+        routeTags.customTag = 'custom-value';
+      }
+    }
+  }
+});
+```
+
+The RouteTagsToken exposes an Object for holding tags related to a given request. There is a default tag called 'name' which refers
+to a stable name for a given route. This is useful for situations where you need low cardinality values for metrics and tracing. By
+default, the route name is set to 'unknown_route' by fusion-core. If you are using `fusion-plugin-react-router` it will automatically
+set the route name to the matched react route.
+
 ---
 
 #### Plugin
@@ -236,18 +262,30 @@ const token:Token = createToken(name: string);
 import {memoize} from 'fusion-core';
 ```
 
-Sometimes, it's useful to maintain the same instance of a plugin associated with a request lifecycle. For example, session state.
+It may be desirable to share the same instance of a particular request-scoped value across different plugins. For example, session state, which is associated with specific requests but might be used in several plugins.
 
-Fusion.js provides a `memoize` utility function to memoize per-request instances.
+Fusion.js provides a `memoize` utility function for this purpose:
+
+* `fn: (ctx: Context) => any` - A function to be memoized
+* returns `memoized: (ctx: Context) => any`
+
+For example, using session state as an example:
+
+```
+const getSession = memoize(ctx => createSession(ctx));
+```
+
+The first time `getSession` is invoked with a given `ctx` object, `createSession(ctx)` will be invoked and a session state instance will be created. Then, any subsequent calls of `getSession` with the exact same `ctx` will yield the existing session state instance for that request.
+
+Under the hood, these lookups work similar to a `WeakMap` so these memoized values are garbage collected along with each `ctx` object.
+
+Note that by convention, Fusion.js plugins provide these memoized getters via a `from` method.
 
 ```js
 const memoized = {from: memoize((fn: (ctx: Context) => any))};
 ```
 
-* `fn: (ctx: Context) => any` - A function to be memoized
-* returns `memoized: (ctx: Context) => any`
-
-Idiomatically, Fusion.js plugins provide memoized instances via a `from` method. This method is meant to be called from a [middleware](#middleware):
+This method is meant to be called from a [middleware](#middleware), for example:
 
 ```js
 createPlugin({
@@ -335,7 +373,7 @@ In the server, `ctx` also exposes the same properties as a [Koa context](http://
 * `ctx: Object`
   * `req: http.IncomingMessage` - [Node's `request` object](https://nodejs.org/api/http.html#http_class_http_incomingmessage)
   * `res: Response` - [Node's `response` object](https://nodejs.org/api/http.html#http_class_http_serverresponse)
-  * `request: Request` - [Koa's `request` object](https://koajs.com/#request): <details><summary>View Koa request details</summary>
+  * `request: Request` - [Koa's `request` object](https://koajs.com/#request): View Koa request details
     * `header: Object` - alias of `request.headers`
     * `headers: Object` - map of parsed HTTP headers
     * `method: string` - HTTP method
@@ -363,9 +401,8 @@ In the server, `ctx` also exposes the same properties as a [Koa context](http://
     * `acceptsCharset: (...charsets: ...string) => boolean` - check if charsets are acceptable
     * `acceptsLanguages: (...languages: ...string) => boolean` - check if langs are acceptable
     * `get: (name: String) => string` - returns a header field
-  </details>
 
-  * `response: Response` - [Koa's `response` object](https://koajs.com/#response): <details><summary>View Koa response details</summary>
+  * `response: Response` - [Koa's `response` object](https://koajs.com/#response): View Koa response details
     * `header: Object` - alias of `request.headers`
     * `headers: Object` - map of parsed HTTP headers
     * `socket: Socket` - response socket
@@ -387,9 +424,8 @@ In the server, `ctx` also exposes the same properties as a [Koa context](http://
     * `etag: String` - set the ETag of a response including the wrapped `"`s.
     * `vary: (field: String) => String` - vary on `field`
     * `flushHeaders () => undefined` - flush any set headers, and begin the body
-    </details>
 
-  * `cookies: {get, set}` - cookies based on [Cookie Module](https://github.com/pillarjs/cookies): <details><summary>View Koa cookies details</summary>
+  * `cookies: {get, set}` - cookies based on [Cookie Module](https://github.com/pillarjs/cookies): View Koa cookies details
     * `get: (name: string, options: ?Object) => string` - get a cookie
       * `name: string`
       * `options: {signed: boolean}`
@@ -405,7 +441,6 @@ In the server, `ctx` also exposes the same properties as a [Koa context](http://
         * `secure: boolean` - secure cookie
         * `httpOnly: boolean` - server-accessible cookie, true by default
         * `overwrite: boolean` - a boolean indicating whether to overwrite previously set cookies of the same name (false by default). If this is true, all cookies set during the same request with the same name (regardless of path or domain) are filtered out of the Set-Cookie header when setting this cookie.
-  </details>
 
   * `state: Object` - recommended namespace for passing information through middleware and to your frontend views `ctx.state.user = await User.find(id)`
   * `throw: (status: ?number, message: ?string, properties: ?Object) => void` - throws an error
@@ -778,4 +813,3 @@ app.register(ValueToken, createPlugin({
 If you do not need to access the value by associating it with a token, there
 should be no reason to use the Fusion.js DI system for it. It is recommended to
 import and use the value directly in your application.
-

@@ -7,27 +7,38 @@ export type GetManifestArgs = {
 };
 export type GetManifest = (GetManifestArgs) => Promise<Manifest>
 export type Manifest = {
+  registry?: string,
   projects: Array<string>,
   versionPolicy?: VersionPolicy,
   hooks?: Hooks,
   workspace: "host" | "sandbox",
 }
+export type ExceptionMetadata = {
+  name: string,
+  versions: Array<string>
+};
 export type VersionPolicy = {
   lockstep: boolean,
-  exceptions: Array<string>,
+  exceptions: Array<string | ExceptionMetadata>,
 }
 export type Hooks = {
   preinstall?: string,
   postinstall?: string,
+  postcommand?: string,
 }
 */
 const getManifest /*: GetManifest */ = async ({root}) => {
   const manifest = `${root}/manifest.json`;
   const data = await read(manifest, 'utf8');
   const parsed = JSON.parse(data || '{}');
-  parsed.workspace = parsed.workspace || 'host';
-  parsed.projects = parsed.projects || [];
-  return parsed;
+
+  return {
+    // defaults
+    workspace: 'host',
+    projects: [],
+    dependencySyncRule: 'web_library',
+    ...parsed,
+  };
 };
 
 module.exports = {getManifest};

@@ -18,6 +18,7 @@ Incremental, cacheable builds for large Javascript monorepos. Uses [Bazel](https
 - Misc
   - [Yarn equivalents](#yarn-equivalents)
   - [Bazel equivalents](#bazel-equivalents)
+  - [Using a preinstalled version of Bazel](#using-a-preinstalled-version-of-bazel)
   - [Monorepo-wide static analysis](#monorepo-wide-static-analysis)
   - [Contributing](CONTRIBUTING.md)
 
@@ -327,14 +328,20 @@ If you get into a bad state, here are some things you can try:
 - [`jazelle --help`](#jazelle---help)
 - [`jazelle version`](#jazelle-version)
 - [`jazelle init`](#jazelle-init)
+- [`jazelle scaffold`](#jazelle-scaffold)
 - [`jazelle install`](#jazelle-install)
 - [`jazelle ci`](#jazelle-ci)
 - [`jazelle add`](#jazelle-add)
 - [`jazelle remove`](#jazelle-remove)
 - [`jazelle upgrade`](#jazelle-upgrade)
 - [`jazelle dedupe`](#jazelle-dedupe)
+- [`jazelle prune`](#jazelle-prune)
 - [`jazelle purge`](#jazelle-purge)
 - [`jazelle check`](#jazelle-check)
+- [`jazelle outdated`](#jazelle-outdated)
+- [`jazelle resolutions`](#jazelle-resolutions)
+- [`jazelle align`](#jazelle-align)
+- [`jazelle localize`](#jazelle-localize)
 - [`jazelle chunk`](#jazelle-chunk)
 - [`jazelle changes`](#jazelle-changes)
 - [`jazelle plan`](#jazelle-plan)
@@ -345,8 +352,12 @@ If you get into a bad state, here are some things you can try:
 - [`jazelle lint`](#jazelle-lint)
 - [`jazelle flow`](#jazelle-flow)
 - [`jazelle start`](#jazelle-start)
+- [`jazelle script`](#jazelle-script)
 - [`jazelle bazel`](#jazelle-bazel)
+- [`jazelle node`](#jazelle-node)
 - [`jazelle yarn`](#jazelle-yarn)
+- [`jazelle exec`](#jazelle-exec)
+- [`jazelle each`](#jazelle-each)
 - [`jazelle bump`](#jazelle-bump)
 - [`jazelle doctor`](#jazelle-doctor)
 - [`jazelle setup`](#jazelle-setup)
@@ -364,11 +375,24 @@ Displays help information
 
 ### `jazelle version`
 
-Displays installed version
+Displays installed version. You may see two values: `actual` is the version of Jazelle being run. `system` is the version of Jazelle that is globally installed in the machine. Note that they may be different because the `actual` version is set in a repository's `WORKSPACE` file.
 
 ### `jazelle init`
 
 Scaffolds required workspace files
+
+### `jazelle scaffold`
+
+- Copies a template into another folder
+- Generates [Bazel](https://bazel.build/) BUILD files if they don't already exist for the relevant projects.
+- Aligns dependency versions and regenerates lockfiles if needed
+- Runs `prescaffold` and `postscaffold` hooks
+
+`jazelle scaffold --from from --to to --name name`
+
+- `--from` - Folder to copy from. Can be an absolute path or relative to `process.cwd()`
+- `--to` - Folder to copy to. Can be an absolute path or relative to `process.cwd()`
+- `--name` - The name field in package.json
 
 ### `jazelle install`
 
@@ -392,10 +416,9 @@ Downloads external dependencies and links local dependencies. Does not create or
 
 Adds a dependency to the project's package.json, syncing the `yarn.lock` file, and the matching `web_library` rule in the relevant BUILD.bazel file if needed
 
-`jazelle add --name [name] --dev --cwd [cwd]`
-`jazelle add [name] --dev --cwd [cwd]`
+`jazelle add [deps...] --dev --cwd [cwd]`
 
-- `--name` - Name of dependency and it's version to add. ie., `foo@1.2.3`. If version is not specified, defaults to `npm info [name] version` for 3rd party packages, or the local version for local packages.
+- `[deps...]` - Name(s) of dependency and it's version to add. ie., `foo@1.2.3`. If version is not specified, defaults to `npm info [name] version` for 3rd party packages, or the local version for local packages.
 - `--dev` - Whether to install as a devDependency. Default to `false`
 - `--cwd` - Project folder (absolute or relative to shell `cwd`). Defaults to `process.cwd()`
 
@@ -403,21 +426,18 @@ Adds a dependency to the project's package.json, syncing the `yarn.lock` file, a
 
 Removes a dependency from the project's package.json, syncing the `yarn.lock` file, and the matching `web_library` rule in the relevant BUILD.bazel file if needed
 
-`jazelle remove --name [name] --cwd [cwd]`
-`jazelle remove [name] --cwd [cwd]`
+`jazelle remove [deps...] --cwd [cwd]`
 
-- `--name` - Name of dependency to remove
+- `[deps...]` - Name(s) of dependency to remove
 - `--cwd` - Project folder (absolute or relative to shell `cwd`). Defaults to `process.cwd()`
 
 ### `jazelle upgrade`
 
 Upgrades a dependency across all local projects that use it
 
-`jazelle upgrade --name [name] --from [from]`
-`jazelle upgrade [name] --from [from]`
+`jazelle upgrade [args...]`
 
-- `name` - Name of dependency and it's version to upgrade to. ie., `foo@1.2.3`. If version is not specified, defaults to `npm info [name] version` for 3rd party packages, or the local version for local packages.
-- `--from` - Only upgrade projects where the current minimum version of the dep is in range of the `from` version range. Optional.
+- `args` - Space-separated list of dependency names and optionally their desired version ranges. e.g., `foo@^1.2.3`. If version is not specified, defaults to `npm info [name] version` for 3rd party packages, or the local version for local packages. Note that local packages must be pinned to an exact version.
 
 ### `jazelle dedupe`
 
@@ -425,17 +445,27 @@ Dedupe transitive dependencies in projects' yarn.lock files
 
 `jazelle dedupe`
 
+### `jazelle prune`
+
+Deletes unused transitive dependencies in projects' yarn.lock files
+
+`jazelle prune`
+
 ### `jazelle purge`
 
 Removes generated files (i.e. `node_modules` folders and bazel output files)
 
-`jazelle purge`
+`jazelle purge --force`
+
+- `--force` - Whether to also purge Bazel cache. Defaults to false
 
 ### `jazelle check`
 
 Shows a report of out-of-sync top level dependencies across projects
 
-`jazelle check`
+`jazelle check --json`
+
+- `--json` - Whether to output as JSON. This is useful if you want to pipe the report to `jq` (e.g `jazelle changes --json | jq .jest` to see report for only `jest`)
 
 ```js
 // sample report
@@ -457,6 +487,32 @@ Shows a report of out-of-sync top level dependencies across projects
   }
 }
 ```
+
+### `jazelle outdated`
+
+List packages that are outdated and their versions
+
+`jazelle outdated`
+
+### `jazelle resolutions`
+
+List yarn resolutions per package in JSON format
+
+`jazelle resolutions`
+
+### `jazelle align`
+
+Align a project's dependency versions to respect the version policy, if there is one
+
+`jazelle align --cwd [cwd]`
+
+- `--cwd` - Project folder (absolute or relative to shell `cwd`). Defaults to `process.cwd()`
+
+### `jazelle localize`
+
+Align dependency versions to local versions, if a local version exists
+
+`jazelle localize`
 
 ### `jazelle chunk`
 
@@ -482,6 +538,7 @@ List projects that have changed since the last git commit.
 `jazelle changes`
 
 - `--files` - A file containing a list of changed files, one per line. Defaults to stdin
+- `--format` - 'targets' or 'dirs'. Defaults to 'targets'. Determine whether to return directory paths or bazel targets
 
 The `files` file can be generated via git:
 
@@ -566,6 +623,26 @@ Runs a project. Calls `scripts.start` in package.json
 - `--cwd` - Project folder (absolute or relative to shell `cwd`). Defaults to `process.cwd()`
 - `args` - A space separated list of arguments to pass to the start script
 
+### `jazelle script`
+
+Runs a npm script. Calls `scripts[command]` in package.json
+
+`jazelle script [command] [args...] --cwd [cwd]`
+
+- `command` - A npm script to run
+- `args` - A space separated list of arguments to pass to the script
+- `--cwd` - Project folder (absolute or relative to shell `cwd`). Defaults to `process.cwd()`
+
+Npm scripts can also be called by omitting the `script` command, for example `jazelle [command]`.
+
+### `jazelle bin-path`
+
+Print the local path of a binary
+
+`jazelle bin-path [name]`
+
+- `name` - 'bazel', 'node', or 'yarn'
+
 ### `jazelle bazel`
 
 Runs a Bazel command
@@ -575,6 +652,15 @@ Runs a Bazel command
 - `--cwd` - Project folder (absolute or relative to shell `cwd`). Defaults to `process.cwd()`
 - `args` - A space separated list of Bazel arguments
 
+### `jazelle node`
+
+Runs a Node script
+
+`jazelle node --cwd [cwd] [args...]`
+
+- `--cwd` - Project folder (absolute or relative to shell `cwd`). Defaults to `process.cwd()`
+- `args` - A space separated list of arguments
+
 ### `jazelle yarn`
 
 Runs a Yarn command
@@ -583,6 +669,24 @@ Runs a Yarn command
 
 - `--cwd` - Project folder (absolute or relative to shell `cwd`). Defaults to `process.cwd()`
 - `args` - A space separated list of Yarn arguments
+
+### `jazelle exec`
+
+Runs a bash script
+
+`jazelle exec --cwd [cwd] [args...]`
+
+- `--cwd` - Project folder (absolute or relative to shell `cwd`). Defaults to `process.cwd()`
+- `args` - List of shell args
+
+### `jazelle each`
+
+Runs a bash script in all projects, parallelizing across CPUs
+
+`jazelle each --cores [cores] [...args]`
+
+- `cores` - Number of cores to use. Defaults to `os.cpus().length - 1`
+- `args` - List of shell args
 
 ### `jazelle bump`
 
@@ -626,14 +730,18 @@ If you want commands to display colorized output, run their respective NPM scrip
 
 - [runCLI](#runcli)
 - [version](#version)
+- [init](#init)
 - [scaffold](#scaffold)
 - [install](#install)
 - [add](#add)
 - [remove](#remove)
 - [upgrade](#upgrade)
 - [dedupe](#dedupe)
+- [prune](#prune)
 - [purge](#purge)
 - [check](#check)
+- [align](#align)
+- [localize](#localize)
 - [chunk](#chunk)
 - [changes](#changes)
 - [plan](#plan)
@@ -643,8 +751,13 @@ If you want commands to display colorized output, run their respective NPM scrip
 - [test](#test)
 - [lint](#lint)
 - [flow](#flow)
+- [start](#start)
+- [script](#script)
 - [bazel](#bazel)
+- [node](#node)
 - [yarn](#yarn)
+- [exec](#exec)
+- [each](#each)
 - [bump](#bump)
 - [doctor](#doctor)
 - [getRootDir](#getRootDir)
@@ -663,13 +776,29 @@ The currently installed version. Note: this is a property, not a function.
 
 `let version: string`
 
-### `scaffold`
+### `init`
 
 Generates Bazel files required to make Jazelle run in a workspace
 
 `let version: ({cwd: string}) => Promise<void>`
 
 - `cwd` - Project folder (absolute path)
+
+
+### `scaffold`
+
+- Copies a template into another folder
+- Generates [Bazel](https://bazel.build/) BUILD files if they don't already exist for the relevant projects.
+- Aligns dependency versions and regenerates lockfiles if needed
+- Runs `prescaffold` and `postscaffold` hooks
+
+`let scaffold: ({root: string, cwd: string, from: string, to: string, name?: string})`
+
+- `root` - Monorepo root folder (absolute path)
+- `cwd` - Project folder (absolute path)
+- `from` - Folder to copy from. Can be an absolute path or relative to `process.cwd()`
+- `to` - Folder to copy to. Can be an absolute path or relative to `process.cwd()`
+- `name` - The name field in package.json
 
 ### `install`
 
@@ -695,10 +824,10 @@ Downloads external dependencies and links local dependencies. Does not create or
 
 Adds a dependency to the project's package.json, syncing the `yarn.lock` file, and the matching `web_library` rule in the relevant BUILD.bazel file if needed
 
-`let add: ({root: string, cwd: string, name: string, version: string, dev: boolean}) => Promise<void>`
+`let add: ({root: string, cwd: string, args: string[], version: string, dev: boolean}) => Promise<void>`
 
 - `root` - Monorepo root folder (absolute path)
-- `name` - Name of dependency to add and its version (e.g. `foo@^1.2.3`). If version is not specified, defaults to `npm info [name] version` for 3rd party packages, or the local version for local packages.
+- `args` - Array of dependency names to add with their version (e.g. `foo@^1.2.3`). If version is not specified, defaults to `npm info [name] version` for 3rd party packages, or the local version for local packages.
 - `dev` - Whether to install as a devDependency
 - `cwd` - Project folder (absolute path)
 
@@ -706,20 +835,19 @@ Adds a dependency to the project's package.json, syncing the `yarn.lock` file, a
 
 Removes a dependency from the project's package.json, syncing the `yarn.lock` file, and the matching `web_library` rule in the relevant BUILD.bazel file if needed
 
-`let remove: ({root: string, cwd: string, name: string}) => Promise<void>`
+`let remove: ({root: string, cwd: string, args: string[]}) => Promise<void>`
 
 - `root` - Monorepo root folder (absolute path)
-- `name` - Name of dependency to remove
+- `args` - Array of dependency names to remove
 - `cwd` - Project folder (absolute path)
 
 ### `upgrade`
 
 Upgrades a dependency across all local projects that use it
 
-`let upgrade: ({root: string, name: string, version: string, from: string}) => Promise<void>`
+`let upgrade: ({root: string, args: Array<string>}) => Promise<void>`
 
-- `name` - Name of dependency to upgrade and its version range (e.g. `foo@^1.2.3`). If version is not specified, defaults to `npm info [name] version` for 3rd party packages, or the local version for local packages.
-- `from` - Only upgrade projects where the current minimum version of the dep is in range of the `from` version range. Optional.
+- `args` - Space-separated list of dependency names and optionally their desired version ranges. e.g., `foo@^1.2.3`. If version is not specified, defaults to `npm info [name] version` for 3rd party packages, or the local version for local packages. Note that local packages must be pinned to an exact version.
 
 ### `dedupe`
 
@@ -729,11 +857,22 @@ Dedupe transitive dependencies in projects' yarn.lock files
 
 - `root` - Monorepo root folder (absolute path)
 
+### `prune`
+
+Removes unused transitive dependencies in projects' yarn.lock files
+
+`let prune: ({root: string}) => Promise<void>`
+
+- `root` - Monorepo root folder (absolute path)
+
 ### `purge`
 
 Removes generated files (i.e. `node_modules` folders and bazel output files)
 
-`let purge: ({root: string}) => Promise<void>`
+`let purge: ({root: string, force?: boolean}) => Promise<void>`
+
+- `root` - Monorepo root folder (absolute path)
+- `force` - Whether to also clear bazel cache. Defaults to false
 
 ### `check`
 
@@ -761,6 +900,14 @@ Returns a report of out-of-sync top level dependencies across projects
 ```
 
 ```js
+type ExceptionMetadata = {
+  name: string,
+  versions: Array<string>
+};
+type VersionPolicy = {
+  lockstep: boolean,
+  exceptions: Array<string | ExceptionMetadata>,
+}
 type Report = {
   valid: string,
   policy: {
@@ -770,8 +917,37 @@ type Report = {
   reported: {[string]: {[string]: Array<string>}},
 }
 
-let check: ({root: string}) => Promise<Report>
+let check: ({root: string, projects: Array<string>, versionPolicy: VersionPolicy}) => Promise<Report>
 ```
+
+- `root` - Monorepo root folder (absolute path)
+
+### `outdated`
+
+List packages that are outdated and their versions
+
+`let outdated = ({root: string}) => Promise<void>`
+
+### `resolutions`
+
+List yarn resolutions per package in JSON format
+
+`let resolutions = ({root: string}) => Promise<{[string]: {[string]: string}}>`
+
+### `align`
+
+Align a project's dependency versions to respect the version policy, if there is one
+
+`let align: ({root: string, cwd: string}) => Promise<void>`
+
+- `root` - Monorepo root folder (absolute path)
+- `cwd` - Project folder (absolute path)
+
+### `localize`
+
+Align dependency versions to local versions, if a local version exists
+
+`let localize: ({root: string}) => Promise<void>`
 
 - `root` - Monorepo root folder (absolute path)
 
@@ -802,6 +978,7 @@ List projects that have changed since the last git commit.
 
 - `root` - Monorepo root folder (absolute path)
 - `files` - The path to a file containing a list of changed files, one per line
+- `format` - 'targets' or 'dirs'. Defaults to 'targets'. Determine whether to return directory paths or bazel targets
 
 The `files` file can be generated via git:
 
@@ -904,6 +1081,24 @@ Runs a project. Calls `scripts.start` in package.json
 - `cwd` - Project folder (absolute path)
 - `args` - A list of arguments to pass to the start script
 
+### `script`
+
+Runs a npm script. Calls `scripts[command]` in package.json
+
+`let script: ({root: string, cwd: string, args: Array<string>}) => Promise<void>`
+
+- `root` - Monorepo root folder (absolute path)
+- `cwd` - Project folder (absolute path)
+- `args` - A list of arguments to pass to the script. The first argument should be a command name
+
+### `binPath`
+
+Print the local path of a binary
+
+`let binPath: = (name: 'bazel' | 'node' | 'yarn') => string`
+
+- `name` - 'bazel', 'node', or 'yarn'
+
 ### `bazel`
 
 Runs a Bazel command
@@ -914,16 +1109,43 @@ Runs a Bazel command
 - `cwd` - Project folder (absolute path)
 - `args` - List of Bazel args
 
+### `node`
+
+Runs a Node script
+
+`let node: ({root: string, cwd: string, args: Array<string>}) => Promise<void>`
+
+- `cwd` - Project folder (absolute path)
+- `args` - List of args
+
 ### `yarn`
 
 Runs a Yarn command
 
-`let test: ({root: string, cwd: string, command: string, args: Array<string>}) => Promise<void>`
+`let yarn: ({root: string, cwd: string, args: Array<string>}) => Promise<void>`
+
+- `cwd` - Project folder (absolute path)
+- `args` - List of Yarn args
+
+### `exec`
+
+Runs a bash script
+
+`let exec: ({root: string, cwd: string, args: Array<string>}) => Promise<void>`
 
 - `root` - Monorepo root folder (absolute path)
 - `cwd` - Project folder (absolute path)
-- `command`- A Yarn command (e.g. `add`)
-- `args` - List of Yarn args
+- `args` - List of shell args
+
+### `each`
+
+Runs a bash script in all projects, parallelizing across CPUs
+
+`let each: ({root: string, args: Array<string>, cores: string}) => Promise<void>`
+
+- `cwd` - Project folder (absolute path)
+- `args` - List of shell args
+- `cores` - Number of cores to use. Defaults to `os.cpus().length - 1`
 
 ### `bump`
 
@@ -961,6 +1183,7 @@ Finds the absolute path of the monorepo root folder
 
 - [Projects](#projects)
 - [Workspace](#workspace)
+- [Scaffold hooks](#scaffold-hooks)
 - [Installation hooks](#installation-hooks)
 - [Version policy](#version-policy)
 - [Build file template](#build-file-template)
@@ -980,16 +1203,22 @@ Note: The `manifest.json` file does **not** allow comments; they are present her
   "workspace": "sandbox",
   // Optional installation hooks
   "hooks": {
+    "prescaffold": "echo before",
+    "postscaffold": "echo after",
     "preinstall": "echo before",
     "postinstall": "echo after",
+    "postcommand": "echo after command",
   },
   // Optional version policy
   "versionPolicy": {
     "lockstep": true,
     "exceptions": [
-      "foo"
+      "foo",
+      { "name": "bar", "versions": ["1.0.0", "2.3.7"] },
     ]
-  }
+  },
+  // Optional rule name to use when auto-updating target `deps` in BUILD.bazel
+  "dependencySyncRule": "my_repo_target",
 }
 ```
 
@@ -1018,6 +1247,18 @@ Also note that currently, `jazelle changes` will only report changes that Bazel 
 
 It's strongly recommended that you use `sandbox` mode.
 
+### Scaffold hooks
+
+Scaffold hooks run shell scripts before/after a project is scaffolded.
+
+```json
+{
+  "hooks": {
+    "prescaffold": "echo before",
+    "postscaffold": "echo after"
+  }
+}
+```
 ### Installation hooks
 
 Installation hooks run shell scripts before/after dependency installation.
@@ -1027,6 +1268,7 @@ Installation hooks run shell scripts before/after dependency installation.
   "hooks": {
     "preinstall": "echo before",
     "postinstall": "echo after",
+    "postcommand": "echo after command",
   }
 }
 ```
@@ -1075,6 +1317,20 @@ Here's an alternative policy that may be more pragmatic for large existing codeb
     "exceptions": [
       "foo",
       "bar"
+    ]
+  }
+}
+```
+
+The `exceptions` field may also identify specific versions for dependencies.  These must match the declared versions in `package.json` exactly (i.e. `1.4.0` and `^1.4.0` are considered two separate versions).
+
+```json
+{
+  "versionPolicy": {
+    "lockstep": true,
+    "exceptions": [
+      "foo",
+      { "name": "bar", "versions": [ "1.4.0", "2.3.7" ] }
     ]
   }
 }
@@ -1242,7 +1498,7 @@ Jazelle SHA256 checksum can be computed through the following command:
 curl -fLs https://github.com/lhorie/jazelle/releases/download/v[version]/jazelle-[version].tar.gz | openssl sha256
 ```
 
-Node SHA256 checksums can be found at `https://nodejs.org/dist/v[version]/SHASUM256.txt`. Use the checksums for these files:
+Node SHA256 checksums can be found at `https://nodejs.org/dist/v[version]/SHASUMS256.txt`. Use the checksums for these files:
 
 - `node-v[version]-darwin-x64.tar.gz`
 - `node-v[version]-linux-x64.tar.xz`
@@ -1300,14 +1556,16 @@ web_binary(
   build = string,
   command = string,
   deps = [string],
-  dist = string
+  dist = string,
+  preserve_symlinks = string,
 )
 ```
 
 - `build` - The npm script to build the project. Defaults to `build`
-- `command` - The npm script to run the project. Defaults to `start`
+- `command` - The npm script to run the project. Defaults to `start`. If the command is `run`, the rule acts like `yarn run [command]`
 - `deps` - A list of target labels that are dependencies of this rule
 - `dist` - The name of the output folder where compiled assets are saved to
+- `preserve_symlinks` - Whether to use the Node PRESERVE_SYMLINKS flag. Set to `"1"` for true or `""` for false.
 
 This rule consumes transitive files from the `DefaultInfo(files)` provider of targets specified by `deps`. If the transitive files include `output.tgz` files, they are extracted into the root folder of their respective project (in the Bazel sandbox).
 
@@ -1324,6 +1582,8 @@ web_test(
 
 - `command` - The npm script to execute
 - `deps` - A list of target labels that are dependencies of this rule
+- `gen_srcs` - A list of regexp strings for files or folders that should be copied back to the source folder after sandbox execution. Useful for code generation (e.g. jest snapshots)
+- `preserve_symlinks` - Whether to use the Node PRESERVE_SYMLINKS flag. Set to `"1"` for true or `""` for false.
 
 This rule consumes transitive files from the `DefaultInfo(files)` provider of targets specified by `deps`. If the transitive files include `output.tgz` files, they are extracted into the root folder of their respective project (in the Bazel sandbox).
 
@@ -1340,6 +1600,8 @@ web_test(
 
 - `command` - The npm script to execute
 - `deps` - A list of target labels that are dependencies of this rule
+- `gen_srcs` - A list of regexp strings for files or folders that should be copied back to the source folder after sandbox execution. Useful for code generation (e.g. jest snapshots)
+- `preserve_symlinks` - Whether to use the Node PRESERVE_SYMLINKS flag. Set to `"1"` for true or `""` for false.
 
 This rule consumes transitive files from the `DefaultInfo(files)` provider of targets specified by `deps`. If the transitive files include `output.tgz` files, they are extracted into the root folder of their respective project (in the Bazel sandbox).
 
@@ -1370,6 +1632,7 @@ Jazelle commands are similar to yarn commands, but **not** exactly equivalent. H
 | `jazelle build`   | `yarn run build` | The Jazelle command also builds (and caches) local dependencies              |
 | `jazelle test`    | `yarn run test`  | The Jazelle command caches tests for projects whose code didn't change       |
 | `jazelle add x`   | `yarn add x`     | The Jazelle command also manages deps declared in BUILD.bazel files          |
+| `jazelle foo`     | `yarn run foo`   | The Jazelle command also manages deps declared in BUILD.bazel files          |
 
 You should always use Jazelle commands instead of Yarn commands.
 
@@ -1379,20 +1642,33 @@ You should always use Jazelle commands instead of Yarn commands.
 
 Jazelle allows using Bazel directly for building targets. Here's a table showing equivalent commands:
 
-| Jazelle                    | Bazel                 |
-| -------------------------- | --------------------- |
-| `cd a && jazelle install`  | N/A                   |
-| `cd a && jazelle add x`    | N/A                   |
-| `cd a && jazelle build`    | `bazel build //a:a`   |
-| `cd a && jazelle start`    | `bazel run //a:a`     |
-| `cd a && jazelle dev`      | `bazel run //a:dev`   |
-| `cd a && jazelle test`     | `bazel test //a:test` |
-| `cd a && jazelle lint`     | `bazel run //a:lint`  |
-| `cd a && jazelle flow`     | `bazel run //a:flow`  |
+| Jazelle                    | Bazel                         |
+| -------------------------- | ----------------------------- |
+| `cd a && jazelle install`  | N/A                           |
+| `cd a && jazelle add x`    | N/A                           |
+| `cd a && jazelle build`    | `bazel build //a:a`           |
+| `cd a && jazelle start`    | `bazel run //a:a`             |
+| `cd a && jazelle dev`      | `bazel run //a:dev`           |
+| `cd a && jazelle test`     | `bazel test //a:test`         |
+| `cd a && jazelle lint`     | `bazel run //a:lint`          |
+| `cd a && jazelle flow`     | `bazel run //a:flow`          |
+| `cd a && jazelle foo`      | `bazel run //a:script -- foo` |
 
 You can use either Jazelle commands or Bazel commands interchangeably. This is helpful if your team is already invested into a Bazel-centric workflow.
 
 It's recommended that you use Jazelle commands instead of Bazel, because Jazelle uses [Bazelisk](https://github.com/bazelbuild/bazelisk/) to enforce a Bazel version. You could also use Bazelisk itself.
+
+## Using a preinstalled version of Bazel
+
+Jazelle supports using a preinstalled Bazel binary (for example, you may want to preinstall it in a docker layer for CI)
+
+If Jazelle detects that Bazel is installed via `which bazel` and the installed version matches the version specified in the `.bazelversion` file, Jazelle will use the installed version instead of attempting to download it.
+
+If you want to use a Bazel binary that is not in your `PATH`, you can also specify it via the `BAZEL_PATH` environment variable:
+
+```sh
+BAZEL_PATH=/path/to/my/bazel jazelle ...
+```
 
 ## Monorepo-wide static analysis
 

@@ -6,6 +6,7 @@
  * @flow
  */
 import type {
+  ExtractDepsType,
   Context,
   ExtractTokenType,
   FusionPlugin,
@@ -13,6 +14,7 @@ import type {
   Token,
   SSRBodyTemplate,
   RenderType as Render,
+  RouteTagsType,
 } from './types.js';
 
 import BaseApp from './base-app';
@@ -51,6 +53,7 @@ export {
   SSRBodyTemplateToken,
   RoutePrefixToken,
   CriticalChunkIdsToken,
+  RouteTagsToken,
 } from './tokens';
 export {createPlugin} from './create-plugin';
 export {createToken} from './create-token';
@@ -67,4 +70,6 @@ export type {
   Token,
   SSRBodyTemplate,
   Render,
+  RouteTagsType,
+  ExtractDepsType,
 };

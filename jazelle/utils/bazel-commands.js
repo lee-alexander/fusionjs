@@ -1,7 +1,9 @@
 // @flow
-const {relative, basename} = require('path');
-const {bazel} = require('./binary-paths.js');
+const {relative, basename, dirname} = require('path');
+const {bazel, node} = require('./binary-paths.js');
 const {spawn} = require('./node-helpers.js');
+
+const startupFlags = ['--host_jvm_args=-Xmx15g'];
 
 /*::
 import type {Stdio} from './node-helpers.js';
@@ -21,7 +23,7 @@ const build /*: Build */ = async ({
   stdio = 'inherit',
 }) => {
   cwd = relative(root, cwd);
-  await spawn(bazel, ['build', `//${cwd}:${name}`, '--verbose_failures'], {
+  await spawn(bazel, [...startupFlags, 'build', `//${cwd}:${name}`], {
     stdio,
     env: process.env,
     cwd: root,
@@ -49,7 +51,7 @@ const test /*: Test */ = async ({
   const testParams = args.map(arg => `--test_arg=${arg}`);
   await spawn(
     bazel,
-    ['run', `//${cwd}:${name}`, '--verbose_failures', ...testParams],
+    [...startupFlags, 'run', `//${cwd}:${name}`, ...testParams],
     {
       stdio,
       env: process.env,
@@ -79,7 +81,7 @@ const run /*: Run */ = async ({
   const runParams = args.length > 0 ? ['--', ...args] : [];
   await spawn(
     bazel,
-    ['run', `//${cwd}:${name}`, '--verbose_failures', ...runParams],
+    [...startupFlags, 'run', `//${cwd}:${name}`, ...runParams],
     {
       stdio,
       env: process.env,
@@ -140,4 +142,56 @@ const start /*: Start */ = async ({root, cwd, args, stdio = 'inherit'}) => {
   await run({root, cwd, args, stdio});
 };
 
-module.exports = {build, test, run, dev, lint, flow, start};
+/*::
+export type ExecArgs = {
+  root: string,
+  cwd: string,
+  args: Array<string>,
+  stdio?: Stdio,
+}
+export type Exec = (ExecArgs) => Promise<void>;
+*/
+const exec /*: Exec */ = async ({root, cwd, args, stdio = 'inherit'}) => {
+  const [command, ...params] = args;
+  const path = process.env.PATH || '';
+  const bazelDir = dirname(bazel);
+  const nodeDir = dirname(node);
+  const env = {
+    ...process.env,
+    PATH: `${bazelDir}:${nodeDir}:${path}:${cwd}/node_modules/.bin`,
+  };
+  await spawn(command, params, {cwd, env, stdio});
+};
+
+/*::
+export type ScriptArgs = {
+  root: string,
+  cwd: string,
+  command: string,
+  args: Array<string>,
+  stdio?: Stdio,
+};
+type Script = (ScriptArgs) => Promise<void>;
+*/
+const script /*: Script */ = async ({
+  root,
+  cwd,
+  command,
+  args,
+  stdio = 'inherit',
+}) => {
+  await run({root, cwd, args: [command, ...args], name: 'script', stdio});
+};
+
+module.exports = {
+  startupFlags,
+  build,
+  test,
+  lint,
+  flow,
+  dev,
+  start,
+  run,
+  exec,
+  script,
+};

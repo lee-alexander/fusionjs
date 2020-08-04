@@ -1,11 +1,20 @@
 // @flow
 const {dirname, relative} = require('path');
 
-const {isDepsetSubset} = require('./is-depset-subset.js');
+const {getHash} = require('./checksum-cache.js');
 const {merge} = require('./lockfile.js');
-const {read, exec, spawn, write, exists, remove} = require('./node-helpers.js');
+const {
+  read,
+  move,
+  exec,
+  spawn,
+  write,
+  exists,
+  remove,
+} = require('./node-helpers.js');
 const {node, yarn} = require('./binary-paths.js');
 const {setupSymlinks} = require('./setup-symlinks.js');
+const {executeHook} = require('./execute-hook.js');
 
 /*::
 import type {Metadata} from './get-local-dependencies.js';
@@ -34,15 +43,66 @@ const installDeps /*: InstallDeps */ = async ({
 
   // we may already have things installed. If so, check whether we need to reinstall
   let needsInstall = true;
-  if (modulesDir && (await exists(`${modulesDir}/.jazelle-source`))) {
-    await spawn('mv', [modulesDir, `${bin}/node_modules`], {cwd: root});
-    const prevSource = `${bin}/node_modules/.jazelle-source`;
-    const prev = JSON.parse(await read(prevSource, 'utf8'));
-    const currMeta = JSON.parse(await read(`${cwd}/package.json`, 'utf8'));
-    needsInstall = !isDepsetSubset({of: prev.meta, it: currMeta});
+  const hash = await getHash(`${cwd}/yarn.lock`);
+  if (await exists(`${modulesDir}/.jazelle-source`)) {
+    const data = await read(`${modulesDir}/.jazelle-source`, 'utf8');
+    const prev = JSON.parse(data);
+    if (await exists(prev.dir)) await remove(prev.dir);
+    await move(modulesDir, prev.dir);
+
+    if (await exists(`${bin}/node_modules/.jazelle-source`)) {
+      const data = await read(`${bin}/node_modules/.jazelle-source`, 'utf8');
+      const curr = JSON.parse(data);
+      if (hash === curr.hash) needsInstall = false;
+    }
   }
 
-  // generate global lock file
+  await generateLockfile({root, bin, deps, ignore});
+
+  // jazelle hook
+  await executeHook(preinstall, root);
+  await executeNpmHooks(deps, 'preinstall');
+
+  // install external deps
+  if (needsInstall) await generateNodeModules(bin);
+
+  if (await exists(modulesDir)) {
+    await remove(modulesDir);
+  }
+  await move(`${bin}/node_modules`, modulesDir);
+  await setupSymlinks({root, deps});
+
+  await executeNpmHooks(deps, 'postinstall');
+  await executeHook(postinstall, root);
+
+  // record the source of this node_modules so we are able to recycle on future installs if needed
+  const sourceFile = `${modulesDir}/.jazelle-source`;
+  const data = {
+    dir: `${bin}/node_modules`,
+    hash,
+    upstreams: deps.map(d => d.dir),
+  };
+  await write(sourceFile, JSON.stringify(data, null, 2), 'utf8');
+};
+
+const executeNpmHooks = async (deps, type) => {
+  const nodePath = dirname(node);
+  for (const dep of deps) {
+    const options = {
+      env: {
+        ...process.env,
+        PATH: `${nodePath}:${String(process.env.PATH)}`,
+      },
+      cwd: dep.dir,
+    };
+    const stdio = [process.stdout, process.stderr];
+    if (dep.meta.scripts && dep.meta.scripts[type]) {
+      await exec(dep.meta.scripts[type], options, stdio);
+    }
+  }
+};
+
+const generateLockfile = async ({root, bin, deps, ignore}) => {
   const tmp = `${root}/third_party/jazelle/temp/yarn-utilities-tmp`;
   await spawn('rm', ['-f', `${bin}/yarn.lock`], {cwd: root});
   await spawn('rm', ['-f', `${bin}/package.json`], {cwd: root});
@@ -52,98 +112,27 @@ const installDeps /*: InstallDeps */ = async ({
     ignore: ignore.map(dep => dep.meta.name),
     tmp,
   });
+};
 
-  // jazelle hook
+const generateNodeModules = async bin => {
   const nodePath = dirname(node);
-  if (typeof preinstall === 'string') {
-    // prioritize hermetic Node version over system version
-    await exec(
-      preinstall,
-      {
-        env: {...process.env, PATH: `${nodePath}:${String(process.env.PATH)}`},
-        cwd: root,
-      },
-      [process.stdout, process.stderr]
-    );
-  }
-
-  // package preinstall hook
-  for (const dep of deps) {
-    if (dep.meta.scripts && dep.meta.scripts.preinstall) {
-      await exec(
-        dep.meta.scripts.preinstall,
-        {
-          env: {
-            ...process.env,
-            PATH: `${nodePath}:${String(process.env.PATH)}`,
-          },
-          cwd: dep.dir,
-        },
-        [process.stdout, process.stderr]
-      );
-    }
-  }
-
-  // install external deps
-  if (needsInstall) {
-    await spawn(
-      node,
-      [
-        yarn,
-        'install',
-        '--frozen-lockfile',
-        '--non-interactive',
-        '--ignore-optional',
-      ],
-      {
-        env: {
-          ...process.env,
-          PATH: `${nodePath}:${String(process.env.PATH)}`,
-        },
-        cwd: bin,
-        stdio: 'inherit',
-      }
-    );
-    // record the source of this node_modules so we are able to recycle on future installs if needed
-    const meta = deps[deps.length - 1];
-    const sourceFile = `${bin}/node_modules/.jazelle-source`;
-    await write(sourceFile, JSON.stringify(meta, null, 2), 'utf8');
-  }
-
-  if (await exists(modulesDir)) {
-    await remove(`${root}/${modulesDir}`);
-  }
-  await spawn('mv', [`${bin}/node_modules`, modulesDir], {cwd: root});
-  await setupSymlinks({root, deps});
-
-  // package postinstall hook
-  for (const dep of deps) {
-    if (dep.meta.scripts && dep.meta.scripts.postinstall) {
-      await exec(
-        dep.meta.scripts.postinstall,
-        {
-          env: {
-            ...process.env,
-            PATH: `${nodePath}:${String(process.env.PATH)}`,
-          },
-          cwd: dep.dir,
-        },
-        [process.stdout, process.stderr]
-      );
-    }
-  }
-
-  // jazelle hook
-  if (typeof postinstall === 'string') {
-    await exec(
-      postinstall,
-      {
-        env: {...process.env, PATH: `${nodePath}:${String(process.env.PATH)}`},
-        cwd: root,
-      },
-      [process.stdout, process.stderr]
-    );
-  }
+  const args = [
+    yarn,
+    'install',
+    '--production=false',
+    '--pure-lockfile',
+    '--non-interactive',
+    '--color=always',
+  ];
+  const options = {
+    env: {
+      ...process.env,
+      PATH: `${nodePath}:${String(process.env.PATH)}`,
+    },
+    cwd: bin,
+    stdio: 'inherit',
+  };
+  await spawn(node, args, options);
 };
 
 module.exports = {installDeps};

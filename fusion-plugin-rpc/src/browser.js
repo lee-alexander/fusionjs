@@ -8,7 +8,7 @@
 
 /* eslint-env browser */
 
-import {createPlugin, type Context} from 'fusion-core';
+import {createPlugin, memoize, type Context} from 'fusion-core';
 import {UniversalEventsToken} from 'fusion-plugin-universal-events';
 import {I18nToken} from 'fusion-plugin-i18n';
 import {FetchToken} from 'fusion-tokens';
@@ -49,7 +49,8 @@ class RPC {
   request<TArgs, TResult>(
     rpcId: string,
     args: TArgs,
-    headers: ?{[string]: string}
+    headers: ?{[string]: string},
+    options: ?RequestOptions
   ): Promise<TResult> {
     if (!this.fetch) {
       throw new Error('fusion-plugin-rpc requires `fetch`');
@@ -68,6 +69,7 @@ class RPC {
       `${apiPath}${rpcId}${localeParam}`,
       args instanceof FormData
         ? {
+            ...options,
             method: 'POST',
             headers: {
               // Content-Type will be set automatically
@@ -76,6 +78,7 @@ class RPC {
             body: args,
           }
         : {
+            ...options,
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -119,7 +122,7 @@ const pluginFactory: () => RPCPluginType = () =>
       const {fetch = window.fetch, emitter, rpcConfig, i18n} = deps;
 
       return {
-        from: ctx => {
+        from: memoize(ctx => {
           const locale = (i18n && i18n.from(ctx).locale) || '';
           const localeCode = typeof locale === 'string' ? locale : locale.code;
           return new RPC({
@@ -128,7 +131,7 @@ const pluginFactory: () => RPCPluginType = () =>
             rpcConfig,
             localeCode,
           });
-        },
+        }),
       };
     },
   });
