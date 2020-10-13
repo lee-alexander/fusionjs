@@ -142,7 +142,7 @@ module.exports.DevelopmentRuntime = function(
         reject(err);
       }
       const args = ['-e', command];
-      if (debug) args.push('--inspect-brk');
+      if (debug) args.push('--inspect');
 
       state.proxy = httpProxy.createProxyServer({
         target: {
