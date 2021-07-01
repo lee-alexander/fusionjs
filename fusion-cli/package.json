@@ -1,6 +1,6 @@
 {
   "name": "lee-ts-fusion-cli",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "CLI",
   "bin": {
     "fusion": "bin/cli.js"
